@@ -41,7 +41,7 @@
       display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0;
       color: var(--text);
       background: radial-gradient(1200px 800px at 10% -10%, var(--bg-accent-1), transparent 70%),
-                  radial-gradient(1000px 700px at 110% 10%, var(--bg-accent-2), transparent 60%),
+                  radial-gradient(1000px 700px at 110% 10%, var(--bg-accent-2), transparent 75%),
                   var(--bg);
       transition: background 0.4s ease, color 0.2s ease;
     }
@@ -198,11 +198,11 @@
           <span>에르다 파운틴</span><span id="status-b" class="muted">대기</span>
         </div>
         <div class="rows" style="margin-bottom:8px;">
-          <div class="label" id="label-b">남은 시간: 60.00s</div>
-          <div class="label" id="interval-b-view">간격: 60.0s</div>
+          <div class="label" id="label-b">남은 시간: 75.00s</div>
+          <div class="label" id="interval-b-view">간격: 75.0s</div>
         </div>
         <div class="rows">
-          <div class="row"><label class="label" for="interval-b">간격(초)</label><input id="interval-b" type="number" min="0.1" step="0.1" value="60.0" /></div>
+          <div class="row"><label class="label" for="interval-b">간격(초)</label><input id="interval-b" type="number" min="0.1" step="0.1" value="75.0" /></div>
           <div class="row"><label class="label" for="freq-b">주파수(Hz)</label><input id="freq-b" type="number" min="1" step="1" value="600" /></div>
           <div class="row"><label class="label" for="dur-b">울림(초)</label><input id="dur-b" type="number" min="0.05" step="0.05" value="5.0" /></div>
           <div class="row">
@@ -234,7 +234,7 @@
     </div>
     <div id="compact-timer-b" class="compact-timer">
       <span class="compact-timer-name">에르다 파운틴:</span>
-      <span id="compact-time-b" class="compact-timer-time">60.00s</span>
+      <span id="compact-time-b" class="compact-timer-time">75.00s</span>
     </div>
   </div>
 
@@ -262,7 +262,7 @@
   this.themeToggle = document.getElementById('toggle-theme');
 
         this.initTimer('a', { interval: 10000, freq: 1000, dur: 0.3, name: '숨돌방지' });
-        this.initTimer('b', { interval: 60000, freq: 600, dur: 0.5, name: '에르다 파운틴' });
+        this.initTimer('b', { interval: 75000, freq: 600, dur: 0.5, name: '에르다 파운틴' });
         
         this.bindGlobalEvents();
         this.initAudioContext();
