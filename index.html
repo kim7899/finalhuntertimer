@@ -172,7 +172,7 @@
           <span>숨돌방지</span><span id="status-a" class="muted">대기</span>
         </div>
         <div class="rows" style="margin-bottom:8px;">
-          <div class="label" id="label-a">남은 시간: 10.00s</div>
+          <div class="label" id="label-a">남은 시간: 10.0s</div>
           <div class="label" id="interval-a-view">간격: 10.0s</div>
         </div>
         <div class="rows">
@@ -198,12 +198,12 @@
           <span>에르다 파운틴</span><span id="status-b" class="muted">대기</span>
         </div>
         <div class="rows" style="margin-bottom:8px;">
-          <div class="label" id="label-b">남은 시간: 75.00s</div>
-          <div class="label" id="interval-b-view">간격: 75.0s</div>
+          <div class="label" id="label-b">남은 시간: 110.00s</div>
+          <div class="label" id="interval-b-view">간격: 110.0s</div>
         </div>
         <div class="rows">
-          <div class="row"><label class="label" for="interval-b">간격(초)</label><input id="interval-b" type="number" min="0.1" step="0.1" value="75.0" /></div>
-          <div class="row"><label class="label" for="freq-b">주파수(Hz)</label><input id="freq-b" type="number" min="1" step="1" value="600" /></div>
+          <div class="row"><label class="label" for="interval-b">간격(초)</label><input id="interval-b" type="number" min="0.1" step="0.1" value="110.0" /></div>
+          <div class="row"><label class="label" for="freq-b">주파수(Hz)</label><input id="freq-b" type="number" min="1" step="1" value="1100" /></div>
           <div class="row"><label class="label" for="dur-b">울림(초)</label><input id="dur-b" type="number" min="0.05" step="0.05" value="5.0" /></div>
           <div class="row">
             <div style="display: flex; align-items: center;">
@@ -230,452 +230,392 @@
   <div id="compact-timers" class="compact-timers">
     <div id="compact-timer-a" class="compact-timer">
       <span class="compact-timer-name">숨돌방지:</span>
-      <span id="compact-time-a" class="compact-timer-time">10.00s</span>
+      <span id="compact-time-a" class="compact-timer-time">10s</span>
     </div>
     <div id="compact-timer-b" class="compact-timer">
       <span class="compact-timer-name">에르다 파운틴:</span>
-      <span id="compact-time-b" class="compact-timer-time">75.00s</span>
+      <span id="compact-time-b" class="compact-timer-time">110s</span>
     </div>
   </div>
-
   <script>
-    class MapleTimer {
-      constructor() {
-        this.audioContext = null;
-        this.isRunning = false;
-        this.animationFrameId = null;
-        this.intervalId = null;
-        this.lastTimestamp = 0;
-        this.isBackground = false;
-        this.wakeLock = null;
-  this.theme = 'light';
+  class MapleTimer {
+  constructor() {
+    this.audioContext = null;
+    this.isRunning = false;
+    this.uiFrameId = null;
+    this.logicIntervalId = null;
+    this.wakeLock = null;
+    this.theme = 'light';
 
-        this.timers = {}; // 타이머 객체들을 저장. 훨씬 효율적.
+    this.timers = {};
 
-        this.statusLabel = document.getElementById('status-label');
-        this.startBtn = document.getElementById('start-btn');
-        this.stopBtn = document.getElementById('stop-btn');
+    this.statusLabel = document.getElementById('status-label');
+    this.startBtn = document.getElementById('start-btn');
+    this.stopBtn = document.getElementById('stop-btn');
 
-        // 설정 요소들
-        this.showCompactTimersCheckbox = document.getElementById('show-compact-timers');
-        this.compactTimersContainer = document.getElementById('compact-timers');
-  this.themeToggle = document.getElementById('toggle-theme');
+    this.showCompactTimersCheckbox = document.getElementById('show-compact-timers');
+    this.compactTimersContainer = document.getElementById('compact-timers');
+    this.themeToggle = document.getElementById('toggle-theme');
 
-        this.initTimer('a', { interval: 10000, freq: 1000, dur: 0.3, name: '숨돌방지' });
-        this.initTimer('b', { interval: 75000, freq: 600, dur: 0.5, name: '에르다 파운틴' });
-        
-        this.bindGlobalEvents();
-        this.initAudioContext();
-        this.initVisibilityAPI();
-  this.loadSettings();
-  this.applyTheme();
-        this.updateAllUI();
+    this.initTimer('a', { interval: 10000, freq: 1000, dur: 0.3, name: '숨돌방지' }); // 10s default
+    this.initTimer('b', { interval: 110000, freq: 1100, dur: 0.5, name: '에르다 파운틴' });
+
+    this.bindGlobalEvents();
+    this.initVisibilityAPI();
+    this.loadSettings();
+    this.applyTheme();
+    this.updateAllUI();
+  }
+
+  initTimer(id, defaults) {
+    this.timers[id] = {
+      id: id,
+      defaults: { ...defaults },
+      name: defaults.name,
+      interval: defaults.interval,
+      freq: defaults.freq,
+      dur: defaults.dur,
+      remaining: defaults.interval,
+      targetTime: 0,
+      isPaused: false,
+      warningEnabled: true,
+      dom: {
+        label: document.getElementById(`label-${id}`),
+        status: document.getElementById(`status-${id}`),
+        intervalView: document.getElementById(`interval-${id}-view`),
+        intervalInput: document.getElementById(`interval-${id}`),
+        freqInput: document.getElementById(`freq-${id}`),
+        durInput: document.getElementById(`dur-${id}`),
+        pauseBtn: document.getElementById(`pause-${id}`),
+        resumeBtn: document.getElementById(`resume-${id}`),
+        resetBtn: document.getElementById(`reset-${id}`),
+        compactTime: document.getElementById(`compact-time-${id}`),
+        warningCheckbox: document.getElementById(`warning-${id}`)
       }
+    };
+    this.bindTimerEvents(id);
+  }
 
-      // 타이머를 동적으로 초기화. 반복을 피하기 위함.
-      initTimer(id, defaults) {
-        const timer = {
-          id: id,
-          defaults: { ...defaults },
-          name: defaults.name,
-          interval: defaults.interval,
-          freq: defaults.freq,
-          dur: defaults.dur,
-          remaining: defaults.interval,
-          isPaused: false,
-          warningEnabled: true, // 개별 경고 설정
-          // DOM 요소들을 객체 내부에 그룹화
-          dom: {
-            label: document.getElementById(`label-${id}`),
-            status: document.getElementById(`status-${id}`),
-            intervalView: document.getElementById(`interval-${id}-view`),
-            intervalInput: document.getElementById(`interval-${id}`),
-            freqInput: document.getElementById(`freq-${id}`),
-            durInput: document.getElementById(`dur-${id}`),
-            pauseBtn: document.getElementById(`pause-${id}`),
-            resumeBtn: document.getElementById(`resume-${id}`),
-            resetBtn: document.getElementById(`reset-${id}`),
-            compactTime: document.getElementById(`compact-time-${id}`),
-            warningCheckbox: document.getElementById(`warning-${id}`)
-          }
-        };
-        this.timers[id] = timer;
-        this.bindTimerEvents(id);
+  bindGlobalEvents() {
+    this.startBtn.addEventListener('click', () => this.startAll());
+    this.stopBtn.addEventListener('click', () => this.stopAll());
+    
+    this.showCompactTimersCheckbox.addEventListener('change', () => {
+      this.saveSettings();
+      this.updateCompactDisplay();
+    });
+
+    if (this.themeToggle) {
+      this.themeToggle.addEventListener('change', () => {
+        this.theme = this.themeToggle.checked ? 'dark' : 'light';
+        this.applyTheme();
+        this.saveSettings();
+      });
+    }
+  }
+  
+  bindTimerEvents(id) {
+    const timer = this.timers[id];
+    timer.dom.intervalInput.addEventListener('input', () => this.onIntervalChange(id));
+    timer.dom.freqInput.addEventListener('input', () => this.onSettingChange(id, 'freq'));
+    timer.dom.durInput.addEventListener('input', () => this.onSettingChange(id, 'dur'));
+    timer.dom.pauseBtn.addEventListener('click', () => this.pause(id));
+    timer.dom.resumeBtn.addEventListener('click', () => this.resume(id));
+    timer.dom.resetBtn.addEventListener('click', () => this.reset(id));
+    
+    timer.dom.warningCheckbox.addEventListener('change', () => {
+      timer.warningEnabled = timer.dom.warningCheckbox.checked;
+      this.saveSettings();
+      this.updateTimerUI(id);
+    });
+  }
+
+  async initAudioContext() {
+    if (!this.audioContext) {
+      try {
+        this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
+      } catch (e) {
+        alert('이 브라우저는 오디오 재생을 지원하지 않습니다.');
       }
+    }
+    if (this.audioContext && this.audioContext.state === 'suspended') {
+      await this.audioContext.resume();
+    }
+  }
 
-      bindGlobalEvents() {
-        this.startBtn.addEventListener('click', () => this.startAll());
-        this.stopBtn.addEventListener('click', () => this.stopAll());
-        
-        // 컴팩트 디스플레이 설정 이벤트 바인딩
-        this.showCompactTimersCheckbox.addEventListener('change', () => {
-          this.saveSettings();
-          this.updateCompactDisplay();
-        });
-        // 테마 토글
-        if (this.themeToggle) {
-          this.themeToggle.addEventListener('change', () => {
-            this.theme = this.themeToggle.checked ? 'dark' : 'light';
-            this.applyTheme();
-            this.saveSettings();
-          });
-        }
-      }
-      
-      bindTimerEvents(id) {
-        const timer = this.timers[id];
-        timer.dom.intervalInput.addEventListener('input', () => this.onIntervalChange(id));
-        timer.dom.freqInput.addEventListener('input', () => this.onSettingChange(id, 'freq'));
-        timer.dom.durInput.addEventListener('input', () => this.onSettingChange(id, 'dur'));
-        timer.dom.pauseBtn.addEventListener('click', () => this.pause(id));
-        timer.dom.resumeBtn.addEventListener('click', () => this.resume(id));
-        timer.dom.resetBtn.addEventListener('click', () => this.reset(id));
-        
-        // 개별 경고 설정 이벤트 바인딩
-        timer.dom.warningCheckbox.addEventListener('change', () => {
-          timer.warningEnabled = timer.dom.warningCheckbox.checked;
-          this.saveSettings();
-          this.updateTimerUI(id);
-        });
-      }
-
-      async initAudioContext() {
-        try {
-          this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
-        } catch (e) {
-          console.error('Web Audio API is not supported in this browser.');
-          alert('이 브라우저는 오디오 재생을 지원하지 않습니다.');
-        }
-      }
-
-      initVisibilityAPI() {
-        // Page Visibility API로 백그라운드 상태 감지
-        document.addEventListener('visibilitychange', () => {
-          this.isBackground = document.hidden;
-          if (this.isRunning) {
-            if (this.isBackground) {
-              this.switchToBackgroundMode();
-            } else {
-              this.switchToForegroundMode();
-            }
-          }
-        });
-      }
-
-      async requestWakeLock() {
-        try {
-          if ('wakeLock' in navigator) {
-            this.wakeLock = await navigator.wakeLock.request('screen');
-            console.log('Wake lock activated');
-          }
-        } catch (err) {
-          console.log('Wake lock failed:', err);
-        }
-      }
-
-      releaseWakeLock() {
-        if (this.wakeLock) {
-          this.wakeLock.release();
-          this.wakeLock = null;
-          console.log('Wake lock released');
-        }
-      }
-
-      switchToBackgroundMode() {
-        // 백그라운드에서는 setInterval 사용
-        if (this.animationFrameId) {
-          cancelAnimationFrame(this.animationFrameId);
-          this.animationFrameId = null;
-        }
-        
-        this.lastTimestamp = Date.now();
-        this.intervalId = setInterval(() => {
-          this.backgroundLoop();
-        }, 50); // 50ms 간격으로 체크
-      }
-
-      switchToForegroundMode() {
-        // 포그라운드에서는 requestAnimationFrame 사용
-        if (this.intervalId) {
-          clearInterval(this.intervalId);
-          this.intervalId = null;
-        }
-        
-        this.lastTimestamp = performance.now();
-        this.animationFrameId = requestAnimationFrame((t) => this.mainLoop(t));
-      }
-
-      backgroundLoop() {
-        if (!this.isRunning) return;
-        
-        const currentTime = Date.now();
-        const deltaTime = currentTime - this.lastTimestamp;
-        this.lastTimestamp = currentTime;
-
-        for (const id in this.timers) {
-          const timer = this.timers[id];
-          if (!timer.isPaused) {
-            timer.remaining -= deltaTime;
-            if (timer.remaining <= 0) {
-              this.playBeep(timer.freq, timer.dur);
-              timer.remaining += timer.interval;
-            }
-          }
-        }
-        
-        // 백그라운드에서는 UI 업데이트 빈도를 줄임
-        this.updateAllUI();
-      }
-
-      async playBeep(freq, durationSec) {
-        if (!this.audioContext) return;
-        try {
-          if (this.audioContext.state === 'suspended') await this.audioContext.resume();
-          const osc = this.audioContext.createOscillator();
-          const gain = this.audioContext.createGain();
-          osc.frequency.setValueAtTime(freq, this.audioContext.currentTime);
-          osc.type = 'sine';
-          gain.gain.setValueAtTime(0.3, this.audioContext.currentTime);
-          gain.gain.exponentialRampToValueAtTime(0.0001, this.audioContext.currentTime + durationSec);
-          osc.connect(gain);
-          gain.connect(this.audioContext.destination);
-          osc.start(this.audioContext.currentTime);
-          osc.stop(this.audioContext.currentTime + durationSec);
-        } catch (e) {
-          console.error('Audio playback error:', e);
-        }
-      }
-
-      // === 입력 처리 (통합됨) ===
-      onIntervalChange(id) {
-        const timer = this.timers[id];
-        const sec = Math.max(0.1, parseFloat(timer.dom.intervalInput.value) || 0.1);
-        timer.interval = Math.floor(sec * 1000);
-        timer.remaining = Math.min(timer.remaining, timer.interval); // 간격 줄일 때 남은시간 보정
-        this.updateTimerUI(id);
-      }
-      
-      onSettingChange(id, key) {
-        const timer = this.timers[id];
-        if (key === 'freq') {
-          timer.freq = Math.max(1, Math.floor(parseFloat(timer.dom.freqInput.value) || 1));
-          timer.dom.freqInput.value = String(timer.freq);
-        } else if (key === 'dur') {
-          timer.dur = Math.max(0.05, parseFloat(timer.dom.durInput.value) || 0.05);
-          timer.dom.durInput.value = timer.dur.toFixed(2);
-        }
-      }
-      
-      // === 메인 루프 (개선됨) ===
-      mainLoop(timestamp) {
-        if (!this.isRunning) return;
-        
-        // 실제 경과 시간 계산. 이것이 핵심.
-        const deltaTime = this.lastTimestamp ? timestamp - this.lastTimestamp : 0;
-        this.lastTimestamp = timestamp;
-
-        for (const id in this.timers) {
-          const timer = this.timers[id];
-          if (!timer.isPaused) {
-            timer.remaining -= deltaTime;
-            if (timer.remaining <= 0) {
-              this.playBeep(timer.freq, timer.dur);
-              timer.remaining += timer.interval; // 0에서 다시 시작
-            }
-          }
-        }
-        
-        this.updateAllUI();
-        
-        // 포그라운드에서만 requestAnimationFrame 사용
-        if (!this.isBackground) {
-          this.animationFrameId = requestAnimationFrame((t) => this.mainLoop(t));
-        }
-      }
-
-      updateAllUI() {
-        this.statusLabel.textContent = this.isRunning ? '실행 중' : '정지';
-        this.statusLabel.className = `status-label ${this.isRunning ? 'running' : 'stopped'}`;
-        this.startBtn.disabled = this.isRunning;
-        this.stopBtn.disabled = !this.isRunning;
-        for (const id in this.timers) {
-          this.updateTimerUI(id);
-        }
-        this.updateCompactDisplay();
-      }
-
-      updateTimerUI(id) {
-        const timer = this.timers[id];
-        const remainingSeconds = timer.remaining / 1000;
-        const timeText = remainingSeconds.toFixed(2) + 's';
-        
-        // 메인 UI 업데이트
-        timer.dom.label.textContent = `남은 시간: ${timeText}`;
-        timer.dom.intervalView.textContent = `간격: ${(timer.interval / 1000).toFixed(1)}s`;
-        
-        // 컴팩트 디스플레이 업데이트
-        if (timer.dom.compactTime) {
-          timer.dom.compactTime.textContent = timeText;
-          
-          // 개별 경고 색상 적용 (3초 이하 && 해당 타이머의 경고 설정 활성화)
-          if (timer.warningEnabled && remainingSeconds <= 3) {
-            timer.dom.compactTime.classList.add('warning');
-          } else {
-            timer.dom.compactTime.classList.remove('warning');
-          }
-        }
-        
-        let statusText = '대기';
-        if (this.isRunning) statusText = timer.isPaused ? '일시정지' : '동작 중';
-        timer.dom.status.textContent = statusText;
-
-        timer.dom.pauseBtn.disabled = !this.isRunning || timer.isPaused;
-        timer.dom.resumeBtn.disabled = !this.isRunning || !timer.isPaused;
-      }
-
-      // === 전체 제어 ===
-      async startAll() {
-        if (this.isRunning) return;
-        if (!this.audioContext) await this.initAudioContext();
-        
-        // Wake Lock 요청 (화면이 꺼지지 않도록)
+  initVisibilityAPI() {
+    document.addEventListener('visibilitychange', async () => {
+      if (document.visibilityState === 'visible' && this.isRunning) {
         await this.requestWakeLock();
-        
-        this.isRunning = true;
-        
-        // 시작 시 모든 타이머의 상태를 현재 입력값으로 동기화하고 리셋
-        for (const id in this.timers) {
-          this.onIntervalChange(id);
-          this.onSettingChange(id, 'freq');
-          this.onSettingChange(id, 'dur');
-          this.timers[id].remaining = this.timers[id].interval;
-          this.timers[id].isPaused = false;
-          this.playBeep(this.timers[id].freq, this.timers[id].dur); // 시작 즉시 1회 재생
-        }
-        
-        // 현재 상태에 따라 적절한 루프 시작
-        if (this.isBackground) {
-          this.switchToBackgroundMode();
-        } else {
-          this.lastTimestamp = performance.now();
-          this.animationFrameId = requestAnimationFrame((t) => this.mainLoop(t));
-        }
-        
-        this.updateAllUI();
       }
+    });
+  }
 
-      stopAll() {
-        if (!this.isRunning) return;
-        this.isRunning = false;
-        
-        // Wake Lock 해제
-        this.releaseWakeLock();
-        
-        if (this.animationFrameId) {
-          cancelAnimationFrame(this.animationFrameId);
-          this.animationFrameId = null;
-        }
-        
-        if (this.intervalId) {
-          clearInterval(this.intervalId);
-          this.intervalId = null;
-        }
-        
-        for (const id in this.timers) {
-          this.timers[id].isPaused = false;
-          // 정지 시 남은 시간을 0으로 표시하지 않고, 원래 간격으로 되돌림
-          this.timers[id].remaining = this.timers[id].interval; 
-        }
-        this.updateAllUI();
+  async requestWakeLock() {
+    try {
+      if ('wakeLock' in navigator && (!this.wakeLock || this.wakeLock.released)) {
+        this.wakeLock = await navigator.wakeLock.request('screen');
       }
+    } catch (err) {
+      console.warn('Wake lock failed:', err);
+    }
+  }
 
-      // === 개별 제어 (통합됨) ===
-      pause(id) { if (this.isRunning) { this.timers[id].isPaused = true; this.updateTimerUI(id); } }
-      resume(id) { if (this.isRunning) { this.timers[id].isPaused = false; this.updateTimerUI(id); } }
+  releaseWakeLock() {
+    if (this.wakeLock && !this.wakeLock.released) {
+      this.wakeLock.release();
+      this.wakeLock = null;
+    }
+  }
 
-      reset(id) {
-        const timer = this.timers[id];
-        timer.interval = timer.defaults.interval;
-        timer.freq = timer.defaults.freq;
-        timer.dur = timer.defaults.dur;
-        timer.remaining = timer.defaults.interval;
-        
-        timer.dom.intervalInput.value = (timer.defaults.interval / 1000).toFixed(1);
-        timer.dom.freqInput.value = String(timer.defaults.freq);
-        timer.dom.durInput.value = String(timer.defaults.dur);
-        
-        // 경고 설정은 초기화하지 않고 유지
-        this.updateTimerUI(id);
-      }
+  async playBeep(freq, durationSec) {
+    if (!this.audioContext) return;
+    try {
+      const osc = this.audioContext.createOscillator();
+      const gain = this.audioContext.createGain();
+      const now = this.audioContext.currentTime;
       
-      // === 컴팩트 디스플레이 관리 ===
-      updateCompactDisplay() {
-        if (this.showCompactTimersCheckbox.checked && this.isRunning) {
-          this.compactTimersContainer.classList.add('show');
-        } else {
-          this.compactTimersContainer.classList.remove('show');
-        }
-      }
+      osc.frequency.setValueAtTime(freq, now);
+      osc.type = 'sine';
       
-      // === 설정 저장/로드 ===
-      saveSettings() {
-        const settings = {
-          showCompactTimers: this.showCompactTimersCheckbox.checked,
-          timerWarnings: {},
-          theme: this.theme
-        };
-        
-        // 각 타이머별 경고 설정 저장
-        for (const id in this.timers) {
-          settings.timerWarnings[id] = this.timers[id].warningEnabled;
-        }
-        
-        localStorage.setItem('mapleTimerSettings', JSON.stringify(settings));
-      }
+      gain.gain.setValueAtTime(0.3, now);
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + durationSec);
       
-      loadSettings() {
-        try {
-          const settings = JSON.parse(localStorage.getItem('mapleTimerSettings') || '{}');
-          this.showCompactTimersCheckbox.checked = settings.showCompactTimers !== false; // 기본값 true
-          this.theme = settings.theme === 'dark' ? 'dark' : 'light';
-          if (this.themeToggle) this.themeToggle.checked = this.theme === 'dark';
-          
-          // 각 타이머별 경고 설정 로드
-          if (settings.timerWarnings) {
-            for (const id in this.timers) {
-              const warningEnabled = settings.timerWarnings[id] !== false; // 기본값 true
-              this.timers[id].warningEnabled = warningEnabled;
-              this.timers[id].dom.warningCheckbox.checked = warningEnabled;
-            }
-          } else {
-            // 기본값 설정 (모든 타이머 경고 활성화)
-            for (const id in this.timers) {
-              this.timers[id].warningEnabled = true;
-              this.timers[id].dom.warningCheckbox.checked = true;
-            }
-          }
-        } catch (e) {
-          // 기본값 유지
-          this.showCompactTimersCheckbox.checked = true;
-          this.theme = 'light';
-          if (this.themeToggle) this.themeToggle.checked = false;
-          for (const id in this.timers) {
-            this.timers[id].warningEnabled = true;
-            this.timers[id].dom.warningCheckbox.checked = true;
-          }
-        }
-      }
+      osc.connect(gain);
+      gain.connect(this.audioContext.destination);
+      
+      osc.start(now);
+      osc.stop(now + durationSec);
+    } catch (e) {
+      console.error('Audio playback error:', e);
+    }
+  }
 
-      applyTheme() {
-        if (this.theme === 'dark') {
-          document.body.classList.add('theme-dark');
-        } else {
-          document.body.classList.remove('theme-dark');
+  onIntervalChange(id) {
+    const timer = this.timers[id];
+    const sec = Math.max(0.1, parseFloat(timer.dom.intervalInput.value) || 0.1);
+    const newInterval = Math.floor(sec * 1000);
+    
+    if (this.isRunning && !timer.isPaused) {
+      const now = Date.now();
+      const timeElapsed = timer.interval - timer.remaining;
+      timer.targetTime = now + Math.max(0, newInterval - timeElapsed);
+    }
+    
+    timer.interval = newInterval;
+    timer.remaining = Math.min(timer.remaining, timer.interval);
+    this.updateTimerUI(id);
+  }
+  
+  onSettingChange(id, key) {
+    const timer = this.timers[id];
+    if (key === 'freq') {
+      timer.freq = Math.max(1, Math.floor(parseFloat(timer.dom.freqInput.value) || 1));
+      timer.dom.freqInput.value = String(timer.freq);
+    } else if (key === 'dur') {
+      timer.dur = Math.max(0.05, parseFloat(timer.dom.durInput.value) || 0.05);
+      timer.dom.durInput.value = timer.dur.toFixed(2);
+    }
+  }
+
+  // 백그라운드에서도 오차가 발생하지 않는 절대 시간 기반 로직
+  logicLoop() {
+    if (!this.isRunning) return;
+    const now = Date.now();
+
+    for (const id in this.timers) {
+      const timer = this.timers[id];
+      if (!timer.isPaused && now >= timer.targetTime) {
+        this.playBeep(timer.freq, timer.dur);
+        timer.targetTime += timer.interval;
+        
+        // 브라우저 지연으로 너무 밀렸을 경우 보정
+        if (timer.targetTime <= now) {
+            timer.targetTime = now + timer.interval;
         }
       }
     }
+  }
 
-    document.addEventListener('DOMContentLoaded', () => { new MapleTimer(); });
-  </script>
+  // 화면 갱신용 프레임 로직
+  uiLoop() {
+    if (!this.isRunning) return;
+    const now = Date.now();
+
+    for (const id in this.timers) {
+      const timer = this.timers[id];
+      if (!timer.isPaused) {
+        timer.remaining = Math.max(0, timer.targetTime - now);
+      }
+    }
+    
+    this.updateAllUI();
+    this.uiFrameId = requestAnimationFrame(() => this.uiLoop());
+  }
+
+  updateAllUI() {
+    this.statusLabel.textContent = this.isRunning ? '실행 중' : '정지';
+    this.statusLabel.className = `status-label ${this.isRunning ? 'running' : 'stopped'}`;
+    this.startBtn.disabled = this.isRunning;
+    this.stopBtn.disabled = !this.isRunning;
+    for (const id in this.timers) {
+      this.updateTimerUI(id);
+    }
+    this.updateCompactDisplay();
+  }
+
+  updateTimerUI(id) {
+    const timer = this.timers[id];
+    const remainingSeconds = timer.remaining / 1000;
+    const timeText = remainingSeconds.toFixed(2) + 's';
+    
+    timer.dom.label.textContent = `남은 시간: ${timeText}`;
+    timer.dom.intervalView.textContent = `간격: ${(timer.interval / 1000).toFixed(1)}s`;
+    
+    if (timer.dom.compactTime) {
+      timer.dom.compactTime.textContent = timeText;
+      if (timer.warningEnabled && remainingSeconds <= 3) {
+        timer.dom.compactTime.classList.add('warning');
+      } else {
+        timer.dom.compactTime.classList.remove('warning');
+      }
+    }
+    
+    let statusText = '대기';
+    if (this.isRunning) statusText = timer.isPaused ? '일시정지' : '동작 중';
+    timer.dom.status.textContent = statusText;
+
+    timer.dom.pauseBtn.disabled = !this.isRunning || timer.isPaused;
+    timer.dom.resumeBtn.disabled = !this.isRunning || !timer.isPaused;
+  }
+
+  async startAll() {
+    if (this.isRunning) return;
+    await this.initAudioContext();
+    await this.requestWakeLock();
+    
+    this.isRunning = true;
+    const now = Date.now();
+    
+    for (const id in this.timers) {
+      const timer = this.timers[id];
+      timer.targetTime = now + timer.interval;
+      timer.isPaused = false;
+      this.playBeep(timer.freq, timer.dur);
+    }
+    
+    // 오디오 타이밍 보장을 위한 setInterval과 UI 렌더링을 위한 rAF 분리
+    this.logicIntervalId = setInterval(() => this.logicLoop(), 50);
+    this.uiFrameId = requestAnimationFrame(() => this.uiLoop());
+    
+    this.updateAllUI();
+  }
+
+  stopAll() {
+    if (!this.isRunning) return;
+    this.isRunning = false;
+    
+    this.releaseWakeLock();
+    
+    if (this.uiFrameId) cancelAnimationFrame(this.uiFrameId);
+    if (this.logicIntervalId) clearInterval(this.logicIntervalId);
+    
+    for (const id in this.timers) {
+      this.timers[id].isPaused = false;
+      this.timers[id].remaining = this.timers[id].interval;
+    }
+    this.updateAllUI();
+  }
+
+  pause(id) { 
+    if (this.isRunning && !this.timers[id].isPaused) { 
+      this.timers[id].isPaused = true; 
+      this.timers[id].remaining = Math.max(0, this.timers[id].targetTime - Date.now());
+      this.updateTimerUI(id); 
+    } 
+  }
+  
+  resume(id) { 
+    if (this.isRunning && this.timers[id].isPaused) { 
+      this.timers[id].isPaused = false; 
+      this.timers[id].targetTime = Date.now() + this.timers[id].remaining;
+      this.updateTimerUI(id); 
+    } 
+  }
+
+  reset(id) {
+    const timer = this.timers[id];
+    timer.interval = timer.defaults.interval;
+    timer.freq = timer.defaults.freq;
+    timer.dur = timer.defaults.dur;
+    timer.remaining = timer.defaults.interval;
+    
+    timer.dom.intervalInput.value = (timer.defaults.interval / 1000).toFixed(1);
+    timer.dom.freqInput.value = String(timer.defaults.freq);
+    timer.dom.durInput.value = String(timer.defaults.dur);
+    
+    if (this.isRunning && !timer.isPaused) {
+      timer.targetTime = Date.now() + timer.interval;
+    }
+    
+    this.updateTimerUI(id);
+  }
+  
+  updateCompactDisplay() {
+    if (this.showCompactTimersCheckbox.checked && this.isRunning) {
+      this.compactTimersContainer.classList.add('show');
+    } else {
+      this.compactTimersContainer.classList.remove('show');
+    }
+  }
+  
+  saveSettings() {
+    const settings = {
+      showCompactTimers: this.showCompactTimersCheckbox.checked,
+      timerWarnings: {},
+      theme: this.theme
+    };
+    for (const id in this.timers) {
+      settings.timerWarnings[id] = this.timers[id].warningEnabled;
+    }
+    localStorage.setItem('mapleTimerSettings', JSON.stringify(settings));
+  }
+  
+  loadSettings() {
+    try {
+      const settings = JSON.parse(localStorage.getItem('mapleTimerSettings') || '{}');
+      this.showCompactTimersCheckbox.checked = settings.showCompactTimers !== false;
+      this.theme = settings.theme === 'dark' ? 'dark' : 'light';
+      if (this.themeToggle) this.themeToggle.checked = this.theme === 'dark';
+      
+      for (const id in this.timers) {
+        const warningEnabled = settings.timerWarnings && settings.timerWarnings[id] !== undefined ? settings.timerWarnings[id] : true;
+        this.timers[id].warningEnabled = warningEnabled;
+        this.timers[id].dom.warningCheckbox.checked = warningEnabled;
+      }
+    } catch (e) {
+      this.showCompactTimersCheckbox.checked = true;
+      this.theme = 'light';
+      if (this.themeToggle) this.themeToggle.checked = false;
+      for (const id in this.timers) {
+        this.timers[id].warningEnabled = true;
+        this.timers[id].dom.warningCheckbox.checked = true;
+      }
+    }
+  }
+
+  applyTheme() {
+    if (this.theme === 'dark') {
+      document.body.classList.add('theme-dark');
+    } else {
+      document.body.classList.remove('theme-dark');
+    }
+  }
+}
+
+document.addEventListener('DOMContentLoaded', () => { new MapleTimer(); });
+</script>
+
+  
 </body>
 </html>
