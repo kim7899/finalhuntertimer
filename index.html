@@ -1,6 +1,14 @@
 <!DOCTYPE html>
 <html lang="ko">
 <head>
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-0T6NV70YFK"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+
+  gtag('config', 'G-0T6NV70YFK');
+</script>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>메이플 사냥 타이머 · 향상된 UI</title>
@@ -239,18 +247,6 @@
   </div>
 
   <script>
-    // === 쿠키 유틸리티 (해당 PC/브라우저에 값 저장) ===
-    function setCookie(name, value, days = 365) {
-      const expires = new Date(Date.now() + days * 24 * 60 * 60 * 1000).toUTCString();
-      // encodeURIComponent로 JSON 문자열 안전하게 저장
-      document.cookie = `${name}=${encodeURIComponent(value)}; expires=${expires}; path=/; SameSite=Lax`;
-    }
-
-    function getCookie(name) {
-      const match = document.cookie.match(new RegExp('(?:^|; )' + name.replace(/([.$?*|{}()[\]\\/+^])/g, '\\$1') + '=([^;]*)'));
-      return match ? decodeURIComponent(match[1]) : null;
-    }
-
     class MapleTimer {
       constructor() {
         this.audioContext = null;
@@ -412,10 +408,7 @@
           clearInterval(this.intervalId);
           this.intervalId = null;
         }
-
-        // 브라우저가 백그라운드 진입 시 자동으로 해제한 Wake Lock을 재요청
-        this.requestWakeLock();
-
+        
         this.lastTimestamp = performance.now();
         this.animationFrameId = requestAnimationFrame((t) => this.mainLoop(t));
       }
@@ -468,7 +461,6 @@
         timer.interval = Math.floor(sec * 1000);
         timer.remaining = Math.min(timer.remaining, timer.interval); // 간격 줄일 때 남은시간 보정
         this.updateTimerUI(id);
-        this.saveSettings();
       }
       
       onSettingChange(id, key) {
@@ -480,7 +472,6 @@
           timer.dur = Math.max(0.05, parseFloat(timer.dom.durInput.value) || 0.05);
           timer.dom.durInput.value = timer.dur.toFixed(2);
         }
-        this.saveSettings();
       }
       
       // === 메인 루프 (개선됨) ===
@@ -623,7 +614,6 @@
         
         // 경고 설정은 초기화하지 않고 유지
         this.updateTimerUI(id);
-        this.saveSettings();
       }
       
       // === 컴팩트 디스플레이 관리 ===
@@ -635,61 +625,41 @@
         }
       }
       
-      // === 설정 저장/로드 (쿠키 사용 → 이 PC/브라우저에 저장됨) ===
+      // === 설정 저장/로드 ===
       saveSettings() {
         const settings = {
           showCompactTimers: this.showCompactTimersCheckbox.checked,
-          theme: this.theme,
           timerWarnings: {},
-          timerValues: {} // 사용자가 변경한 간격/주파수/울림 값 저장
+          theme: this.theme
         };
-
+        
+        // 각 타이머별 경고 설정 저장
         for (const id in this.timers) {
-          const timer = this.timers[id];
-          settings.timerWarnings[id] = timer.warningEnabled;
-          settings.timerValues[id] = {
-            interval: timer.interval, // ms
-            freq: timer.freq,
-            dur: timer.dur
-          };
+          settings.timerWarnings[id] = this.timers[id].warningEnabled;
         }
-
-        setCookie('mapleTimerSettings', JSON.stringify(settings));
+        
+        localStorage.setItem('mapleTimerSettings', JSON.stringify(settings));
       }
-
+      
       loadSettings() {
         try {
-          const raw = getCookie('mapleTimerSettings');
-          const settings = raw ? JSON.parse(raw) : {};
-
+          const settings = JSON.parse(localStorage.getItem('mapleTimerSettings') || '{}');
           this.showCompactTimersCheckbox.checked = settings.showCompactTimers !== false; // 기본값 true
           this.theme = settings.theme === 'dark' ? 'dark' : 'light';
           if (this.themeToggle) this.themeToggle.checked = this.theme === 'dark';
-
-          for (const id in this.timers) {
-            const timer = this.timers[id];
-
-            // 경고 설정 로드 (기본값 true)
-            const warningEnabled = settings.timerWarnings ? settings.timerWarnings[id] !== false : true;
-            timer.warningEnabled = warningEnabled;
-            timer.dom.warningCheckbox.checked = warningEnabled;
-
-            // 저장된 간격/주파수/울림 값 복원
-            const savedValues = settings.timerValues && settings.timerValues[id];
-            if (savedValues) {
-              if (typeof savedValues.interval === 'number' && savedValues.interval >= 100) {
-                timer.interval = savedValues.interval;
-                timer.remaining = savedValues.interval;
-                timer.dom.intervalInput.value = (savedValues.interval / 1000).toFixed(1);
-              }
-              if (typeof savedValues.freq === 'number' && savedValues.freq >= 1) {
-                timer.freq = savedValues.freq;
-                timer.dom.freqInput.value = String(savedValues.freq);
-              }
-              if (typeof savedValues.dur === 'number' && savedValues.dur >= 0.05) {
-                timer.dur = savedValues.dur;
-                timer.dom.durInput.value = savedValues.dur.toFixed(2);
-              }
+          
+          // 각 타이머별 경고 설정 로드
+          if (settings.timerWarnings) {
+            for (const id in this.timers) {
+              const warningEnabled = settings.timerWarnings[id] !== false; // 기본값 true
+              this.timers[id].warningEnabled = warningEnabled;
+              this.timers[id].dom.warningCheckbox.checked = warningEnabled;
+            }
+          } else {
+            // 기본값 설정 (모든 타이머 경고 활성화)
+            for (const id in this.timers) {
+              this.timers[id].warningEnabled = true;
+              this.timers[id].dom.warningCheckbox.checked = true;
             }
           }
         } catch (e) {
